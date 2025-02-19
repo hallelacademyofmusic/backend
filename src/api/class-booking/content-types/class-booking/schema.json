@@ -1,0 +1,68 @@
+{
+  "kind": "collectionType",
+  "collectionName": "class_bookings",
+  "info": {
+    "singularName": "class-booking",
+    "pluralName": "class-bookings",
+    "displayName": "Class Booking",
+    "description": ""
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "default": "Piano Lesson",
+      "required": true
+    },
+    "start": {
+      "type": "datetime"
+    },
+    "end": {
+      "type": "datetime"
+    },
+    "instructor": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::instructor.instructor",
+      "inversedBy": "class_bookings"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "bookingStatus": {
+      "type": "enumeration",
+      "enum": [
+        "Pending",
+        "Confirmed"
+      ],
+      "default": "Pending",
+      "required": true
+    },
+    "eventLink": {
+      "type": "string"
+    },
+    "offering": {
+      "type": "enumeration",
+      "enum": [
+        "In-person",
+        "Remote"
+      ],
+      "default": "Remote",
+      "required": true
+    },
+    "location": {
+      "type": "string"
+    },
+    "student": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::student.student",
+      "inversedBy": "class_bookings"
+    }
+  }
+}
