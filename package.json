@@ -13,8 +13,11 @@
   "dependencies": {
     "@strapi/plugin-cloud": "5.6.0",
     "@strapi/plugin-users-permissions": "5.6.0",
+    "@strapi/provider-email-nodemailer": "^5.17.0",
     "@strapi/strapi": "5.6.0",
     "date-fns": "^2.30.0",
+    "ics": "^3.4.0",
+    "nodemailer": "^6.9.7",
     "pg": "8.8.0",
     "react": "^18.0.0",
     "react-datepicker": "^7.5.0",
