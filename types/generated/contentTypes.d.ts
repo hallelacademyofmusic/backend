@@ -379,7 +379,7 @@ export interface ApiClassBookingClassBooking
     singularName: 'class-booking';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     bookingStatus: Schema.Attribute.Enumeration<['Pending', 'Confirmed']> &

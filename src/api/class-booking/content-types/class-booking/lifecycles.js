@@ -1,6 +1,13 @@
 // Track sent emails to prevent duplicates
 const sentEmails = new Set();
 
+// Helper function to create Google Maps link
+function createGoogleMapsLink(location) {
+  if (!location) return null;
+  const encodedLocation = encodeURIComponent(location);
+  return `https://www.google.com/maps/search/?api=1&query=${encodedLocation}`;
+}
+
 module.exports = {
   async afterCreate(event) {
     const { result } = event;
@@ -9,16 +16,34 @@ module.exports = {
     
     try {
       // Fetch the complete booking with populated relations
+      /** @type {any} */
       const booking = await strapi.entityService.findOne('api::class-booking.class-booking', result.id, {
         populate: ['instructor', 'student']
       });
 
-      console.log('Create - Booking id:', booking.id, 'Status:', booking.bookingStatus);
+      // Get the document ID - Method 1 works well, so use it as primary
+      let documentId = result.documentId || result.id;
+      console.log('Document ID retrieved:', documentId);
 
-      // Send email to instructor about new booking (only if not already sent)
+      console.log('Create - Booking id:', booking.id, 'Document ID:', documentId, 'Status:', booking.bookingStatus);
+      console.log('Create - Instructor:', booking.instructor ? `${booking.instructor.firstName} ${booking.instructor.lastName} (${booking.instructor.email})` : 'No instructor');
+      console.log('Create - Student:', booking.student ? `${booking.student.firstName} ${booking.student.lastName} (${booking.student.email})` : 'No student');
+
+      // Send email to instructor about new booking (only if not already sent and has document_id)
       const emailSentKey = `creation_${booking.id}`;
-      if (!sentEmails.has(emailSentKey) && booking.instructor?.email) {
+      
+      // Debug the conditions
+      console.log('Email conditions check:');
+      console.log('- Email already sent:', sentEmails.has(emailSentKey));
+      console.log('- Has instructor email:', !!booking.instructor?.email);
+      console.log('- Has document_id:', !!documentId);
+      
+      if (!sentEmails.has(emailSentKey) && booking.instructor?.email && documentId) {
+        console.log('All conditions met - sending email to instructor');
         sentEmails.add(emailSentKey);
+        
+        // Create Google Maps link for location
+        const googleMapsLink = createGoogleMapsLink(booking.location);
         
         // Send email to instructor about new booking
         const studentName = booking.student ? `${booking.student.firstName} ${booking.student.lastName}` : 'Unknown Student';
@@ -36,7 +61,7 @@ module.exports = {
               <li><strong>Start Time:</strong> ${new Date(booking.start).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</li>
               <li><strong>End Time:</strong> ${new Date(booking.end).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</li>
               <li><strong>Type:</strong> ${booking.offering}</li>
-              ${booking.location ? `<li><strong>Location:</strong> ${booking.location}</li>` : ''}
+              ${booking.location ? `<li><strong>Location:</strong> ${booking.location}${googleMapsLink ? ` - <a href="${googleMapsLink}" style="color: #007bff;">View on Google Maps</a>` : ''}</li>` : ''}
               <li><strong>Status:</strong> ${booking.bookingStatus}</li>
               ${booking.student ? `<li><strong>Student:</strong> ${booking.student.firstName} ${booking.student.lastName}</li>` : ''}
             </ul>
@@ -44,7 +69,7 @@ module.exports = {
             <p><strong>Action Required:</strong> Please log into the admin panel to review and confirm this booking.</p>
             
             <p>
-              <a href="${process.env.ADMIN_URL || 'http://localhost:1337/admin'}/content-manager/collection-types/api::class-booking.class-booking/${booking.id}" 
+              <a href="${process.env.ADMIN_URL || 'http://localhost:1337/admin'}/content-manager/collection-types/api::class-booking.class-booking/${documentId}" 
                  style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
                 Review Booking
               </a>
@@ -54,9 +79,15 @@ module.exports = {
           `
         });
         
-        console.log(`Email sent to instructor for booking ${booking.id}`);
+        console.log(`Email sent to instructor for booking ${booking.id} with document_id ${documentId}`);
       } else {
-        console.log(`Email already sent for booking ${booking.id}, skipping duplicate`);
+        if (!documentId) {
+          console.log(`No document_id found for booking ${booking.id}, email not sent`);
+        } else if (!booking.instructor?.email) {
+          console.log(`No instructor email found for booking ${booking.id}, email not sent`);
+        } else {
+          console.log(`Email already sent for booking ${booking.id}, skipping duplicate`);
+        }
       }
     } catch (error) {
       console.error('Error sending instructor notification:', error);
@@ -70,31 +101,28 @@ module.exports = {
     
     try {
       // Fetch the complete booking with populated relations
+      /** @type {any} */
       const booking = await strapi.entityService.findOne('api::class-booking.class-booking', result.id, {
         populate: ['instructor', 'student']
       });
 
-      // Get the document_id (UID) from the database
-      const bookingWithUid = await strapi.db.query('api::class-booking.class-booking').findOne({
-        where: { id: result.id },
-        select: ['document_id', 'published_at']
-      });
+      // Get the document ID - Method 1 works well, so use it as primary
+      let documentId = result.documentId || result.id;
+      console.log('Document ID retrieved:', documentId);
 
-      console.log('Update - Booking document_id:', bookingWithUid?.document_id, 'Booking id:', booking.id, 'Published:', bookingWithUid?.published_at);
+      console.log('Update - Booking id:', booking.id, 'Document ID:', documentId, 'Status:', booking.bookingStatus);
+      console.log('Update - Instructor:', booking.instructor ? `${booking.instructor.firstName} ${booking.instructor.lastName} (${booking.instructor.email})` : 'No instructor');
+      console.log('Update - Student:', booking.student ? `${booking.student.firstName} ${booking.student.lastName} (${booking.student.email})` : 'No student');
 
-      // Check if this is a new booking being published (has document_id but no email sent yet)
+      // Check if this is a new booking that hasn't had its initial email sent
       const emailSentKey = `creation_${booking.id}`;
-      console.log('Checking email conditions:', {
-        hasDocumentId: !!bookingWithUid?.document_id,
-        documentId: bookingWithUid?.document_id,
-        emailAlreadySent: sentEmails.has(emailSentKey),
-        hasInstructor: !!booking.instructor?.email,
-        instructorEmail: booking.instructor?.email
-      });
       
-      if (bookingWithUid?.document_id && !sentEmails.has(emailSentKey) && booking.instructor?.email) {
-        console.log('Sending initial email for newly published booking');
+      if (documentId && !sentEmails.has(emailSentKey) && booking.instructor?.email) {
+        console.log('Sending initial email for newly created booking');
         sentEmails.add(emailSentKey);
+        
+        // Create Google Maps link for location
+        const googleMapsLink = createGoogleMapsLink(booking.location);
         
         // Send email to instructor about new booking
         const studentName = booking.student ? `${booking.student.firstName} ${booking.student.lastName}` : 'Unknown Student';
@@ -112,7 +140,7 @@ module.exports = {
               <li><strong>Start Time:</strong> ${new Date(booking.start).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</li>
               <li><strong>End Time:</strong> ${new Date(booking.end).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</li>
               <li><strong>Type:</strong> ${booking.offering}</li>
-              ${booking.location ? `<li><strong>Location:</strong> ${booking.location}</li>` : ''}
+              ${booking.location ? `<li><strong>Location:</strong> ${booking.location}${googleMapsLink ? ` - <a href="${googleMapsLink}" style="color: #007bff;">View on Google Maps</a>` : ''}</li>` : ''}
               <li><strong>Status:</strong> ${booking.bookingStatus}</li>
               ${booking.student ? `<li><strong>Student:</strong> ${booking.student.firstName} ${booking.student.lastName}</li>` : ''}
             </ul>
@@ -120,7 +148,7 @@ module.exports = {
             <p><strong>Action Required:</strong> Please log into the admin panel to review and confirm this booking.</p>
             
             <p>
-              <a href="${process.env.ADMIN_URL || 'http://localhost:1337/admin'}/content-manager/collection-types/api::class-booking.class-booking/${bookingWithUid.document_id}" 
+              <a href="${process.env.ADMIN_URL || 'http://localhost:1337/admin'}/content-manager/collection-types/api::class-booking.class-booking/${documentId}" 
                  style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
                 Review Booking
               </a>
@@ -130,22 +158,14 @@ module.exports = {
           `
         });
         
-        console.log(`Email sent to instructor for booking ${booking.id} with document_id ${bookingWithUid.document_id}`);
+        console.log(`Email sent to instructor for booking ${booking.id} with document_id ${documentId}`);
         return; // Exit early since we sent the initial email
       }
 
       // Check if status changed to Confirmed
-      console.log('Booking status:', booking.bookingStatus);
-      
       if (booking.bookingStatus === 'Confirmed') {
         // Check if we've already sent confirmation emails for this booking
         const confirmationEmailSentKey = `confirmation_${booking.id}`;
-        
-        console.log('Checking confirmation email conditions:', {
-          emailAlreadySent: sentEmails.has(confirmationEmailSentKey),
-          hasStudent: !!booking.student?.email,
-          hasInstructor: !!booking.instructor?.email
-        });
         
         if (!sentEmails.has(confirmationEmailSentKey)) {
           console.log('Status changed to Confirmed - sending confirmation emails');
@@ -156,6 +176,9 @@ module.exports = {
           const endDate = new Date(booking.end);
           
           const googleCalendarLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(booking.title)}&dates=${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z&details=${encodeURIComponent(`Class with ${booking.instructor.firstName} ${booking.instructor.lastName}`)}&location=${encodeURIComponent(booking.location || 'Remote')}`;
+
+          // Create Google Maps link for location
+          const googleMapsLink = createGoogleMapsLink(booking.location);
 
           // Update the booking with the event link
           await strapi.entityService.update('api::class-booking.class-booking', result.id, {
@@ -180,7 +203,7 @@ module.exports = {
                   <li><strong>Start Time:</strong> ${new Date(booking.start).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</li>
                   <li><strong>End Time:</strong> ${new Date(booking.end).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</li>
                   <li><strong>Type:</strong> ${booking.offering}</li>
-                  ${booking.location ? `<li><strong>Location:</strong> ${booking.location}</li>` : ''}
+                  ${booking.location ? `<li><strong>Location:</strong> ${booking.location}${googleMapsLink ? ` - <a href="${googleMapsLink}" style="color: #007bff;">View on Google Maps</a>` : ''}</li>` : ''}
                   <li><strong>Instructor:</strong> ${booking.instructor.firstName} ${booking.instructor.lastName}</li>
                 </ul>
                 
@@ -219,12 +242,23 @@ module.exports = {
                   <li><strong>Start Time:</strong> ${new Date(booking.start).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</li>
                   <li><strong>End Time:</strong> ${new Date(booking.end).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</li>
                   <li><strong>Type:</strong> ${booking.offering}</li>
-                  ${booking.location ? `<li><strong>Location:</strong> ${booking.location}</li>` : ''}
+                  ${booking.location ? `<li><strong>Location:</strong> ${booking.location}${googleMapsLink ? ` - <a href="${googleMapsLink}" style="color: #007bff;">View on Google Maps</a>` : ''}</li>` : ''}
                   <li><strong>Student:</strong> ${booking.student.firstName} ${booking.student.lastName}</li>
                   <li><strong>Student Email:</strong> ${booking.student.email}</li>
                 </ul>
                 
                 <p>Please ensure you're available for this session.</p>
+                
+                ${googleCalendarLink ? `
+                <p>You can add this event to your calendar using the link below:</p>
+                
+                <p>
+                  <a href="${googleCalendarLink}" 
+                     style="background-color: #4285f4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                    Add to Google Calendar
+                  </a>
+                </p>
+                ` : ''}
                 
                 <p>Best regards,<br>Hallel Academy</p>
               `
@@ -240,4 +274,4 @@ module.exports = {
       console.error('Error sending confirmation emails:', error);
     }
   }
-}; 
+};
